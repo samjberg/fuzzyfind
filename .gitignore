@@ -1,4 +1,5 @@
 /.remote-xcode-server/
+build/
 *.exe
 *.out
 *.pyd

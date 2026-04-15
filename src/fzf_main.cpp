@@ -318,7 +318,8 @@ vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_thr
     char sep = '\n';
     for (const auto direntry : fs::recursive_directory_iterator(root_path)) {
         fs::path path = direntry.path();
-        string new_path_entry = path.string() + sep;
+        string new_path_entry = path.string();
+        new_path_entry = new_path_entry.substr(1,new_path_entry.size()-2);
         buffer += new_path_entry;
         curr_pos = buffer.size();
         if (!files_only || fs::is_regular_file(path)) {
@@ -347,33 +348,13 @@ vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_thr
 
         if (res.score >= score_threshold) {
             string sub_buffer = buffer_list[i];
-            // size_t start_pos = sub_buffer.find_last_of(sep, res.target_start_pos);
-            // size_t end_pos = sub_buffer.find_first_of(sep, res.target_start_pos);
-            // size_t start_pos = sub_buffer.rfind(sep);
-            // size_t end_pos = sub_buffer.find(sep);
-            // if (start_pos == string::npos) {start_pos = 0;}
-            // if (end_pos == string::npos) {end_pos = sub_buffer.size();}
-            // string result_path = sub_buffer.substr(start_pos, end_pos);
             string result_path = res.match_string;
             results.push_back(result_path);
-            // buffer = "";
             best_score = res.score;
         }
         i++;
     }
-
-    // if (buffer.size() > query.size()) {
-    //     AlignmentResult res = smith_waterman(query, buffer);
-    //     // buffer_list.push_back(buffer);
-    //     // size_t pos = buffer.substr(0, res.target_start_pos).find_last_of('\n');
-    //     size_t start_pos = results.size()==0 ? 0 : buffer.find_last_of(sep, res.target_start_pos);
-    //     size_t end_pos = buffer.find_first_of(sep, res.target_start_pos);
-    //     string result_path = buffer.substr(start_pos, end_pos);
-    //     results.push_back(result_path);
-    // }
-
     cout << "Best score: " << best_score << endl;
-
     return results;
 }
 
@@ -395,6 +376,15 @@ PYBIND11_MODULE(fuzzyfind_functions, m) {
     m.def("smith_waterman", [](string s1, string s2) {
             AlignmentResult res = smith_waterman(s1, s2);
             return res;
+    });
+
+    m.def("fuzzy_search", [](string query, string target, double score_threshold = 35.0, bool files_only = true) {
+            vector<fs::path> path_list = fuzzy_search(query, target, score_threshold, files_only);
+            vector<string> path_str_list;
+            for (const auto &path : path_list) {
+                path_str_list.push_back(path.string());
+            }
+            return path_str_list;
     });
 
 
