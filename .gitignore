@@ -1,0 +1,6 @@
+/.remote-xcode-server/
+*.exe
+*.out
+*.pyd
+*.so
+
