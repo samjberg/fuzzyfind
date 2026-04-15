@@ -16,9 +16,9 @@ size_t MB = 1024 * 1024;
 
 class Pos {
 public:
-    int x, y;
+    size_t x, y;
 
-    Pos(int x, int y): x(x), y(y) {
+    Pos(size_t x, size_t y): x(x), y(y) {
     }
 
     string toStr() {
@@ -191,6 +191,7 @@ size_t directory_filenames_size(string path) {
 
 
 AlignmentResult smith_waterman(string query, string target, char sep='\n') {
+    // cout << "in smith_waterman, target = " << target << "\n\n\n";
     size_t l1 = query.size();
     size_t l2 = target.size();
     Matrix matrix = create_matrix(l1+1, l2+1);
@@ -217,9 +218,9 @@ AlignmentResult smith_waterman(string query, string target, char sep='\n') {
     Pos prev_pos(curr_pos.x, curr_pos.y);
     vector<Pos> positions = {curr_pos};
     vector<Pos> offsets = {Pos(0, 0)};
-    int safety_counter = 0;
-    int curr_y = end_pos.y;
-    int curr_x = end_pos.x;
+    size_t safety_counter = 0;
+    size_t curr_y = end_pos.y;
+    size_t curr_x = end_pos.x;
 
 
     string aligned1 = "";
@@ -263,13 +264,10 @@ AlignmentResult smith_waterman(string query, string target, char sep='\n') {
         }
     }
 
-    reverse(aligned1.begin(), aligned1.end());
-    reverse(aligned2.begin(), aligned2.end());
 
     size_t target_start_pos = static_cast<size_t>(curr_pos.x);
     size_t match_start_pos = target.rfind(sep, target_start_pos);
     size_t match_end_pos = target.find(sep, end_pos.x);
-    // string match_str;
 
     // 1. If rfind doesn't find a newline, the path starts at index 0. 
     // Otherwise, it starts at match_start_pos + 1 (to skip the newline itself).
@@ -286,7 +284,12 @@ AlignmentResult smith_waterman(string query, string target, char sep='\n') {
 
     string match_str = target.substr(actual_start, length);
 
+
+
+    reverse(aligned1.begin(), aligned1.end());
+    reverse(aligned2.begin(), aligned2.end());
     AlignmentResult res{aligned1, aligned2, target_start_pos, match_str, score};
+    // cout << "match_str: " << match_str << ",\tscore: " << score << endl;
     return res;
 }
 
@@ -321,7 +324,7 @@ vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_thr
     vector<string> buffer_list;
     vector<Pos> pos_ranges;
     string buffer;
-    size_t max_buffer_size = 2 * MB;
+    size_t max_buffer_size = 30 * KB;
     buffer.reserve(max_buffer_size);
     double best_score = 0.0;
     size_t curr_pos = 0;
@@ -333,18 +336,14 @@ vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_thr
         fs::path path = direntry.path();
         string new_path_entry = path.string() + sep;
         buffer += new_path_entry;
-        curr_pos = buffer.size();
         if (!files_only || fs::is_regular_file(path)) {
-            size_t curr_buffer_size = curr_pos - curr_start_pos;
-            if (curr_buffer_size >= max_buffer_size) {
-                string sub_buffer = buffer.substr(curr_start_pos, curr_pos - curr_start_pos);
+            if (buffer.size() >= max_buffer_size) {
                 if (futures_list.size() < max_num_threads) {
-                    futures_list.push_back(std::async(smith_waterman, query, sub_buffer, sep));
-                    pos_ranges.push_back(Pos(curr_start_pos, curr_pos - curr_start_pos));
-                    buffer_list.push_back(sub_buffer);
-                    curr_start_pos = curr_pos;
-
+                    futures_list.emplace_back(std::async(smith_waterman, query, std::move(buffer), sep));
+                    buffer.clear();
+                    buffer.reserve(max_buffer_size);
                 }
+                else {break;}
             }
         }
 
@@ -353,13 +352,11 @@ vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_thr
     // for (thread &t : threads_list) {
     int i=0;
     for (future<AlignmentResult> &fut : futures_list) {
-        
-        // fut.wait();
+        cout << "Getting result from thread: " << i << endl;
         AlignmentResult res = fut.get();
-        Pos range = pos_ranges[i];
+        // Pos range = pos_ranges[i];
 
         if (res.score >= score_threshold) {
-            string sub_buffer = buffer_list[i];
             string result_path = res.match_string;
             results.push_back(result_path);
             best_score = res.score;
