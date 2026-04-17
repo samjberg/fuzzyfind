@@ -7,12 +7,18 @@
 #include <algorithm>
 #include <thread>
 #include <future>
+#include <chrono>
 
 namespace fs = std::filesystem;
 using namespace std;
 typedef vector<vector<float>> Matrix;
+typedef std::chrono::high_resolution_clock Time;
+typedef std::chrono::milliseconds ms;
+typedef std::chrono::duration<float> fsec;
 size_t KB = 1024;
 size_t MB = 1024 * 1024;
+size_t AVG_PATH_LEN = 110;
+size_t SIZE_THRESHOLD = 5 * AVG_PATH_LEN;
 
 class Pos {
 public:
@@ -25,12 +31,6 @@ public:
         stringstream ss;
         ss << "(" << this->x << ", " << this->y << ")";
         return ss.str();
-    }
-
-    const char* toCStr() {
-        string s = this->toStr();
-        const char* cstr = s.c_str();
-        return cstr;
     }
 
     Pos operator+(const Pos other) {
@@ -69,6 +69,105 @@ public:
 
 };
 
+class PosScore {
+public:
+    size_t x, y;
+    double score;
+
+    PosScore(size_t x, size_t y, double score): x(x), y(y), score(score){}
+    PosScore(Pos p, double s): x(p.x), y(p.y), score(s){}
+
+    string toStr() {
+        stringstream ss;
+        ss << "(" << this->x << ", " << this->y << ")";
+        return ss.str();
+    }
+
+    void operator=(const PosScore other) {
+        this->x = other.x;
+        this->y = other.y;
+        this->score = other.score;
+    }
+
+    void operator=(const double other) {
+        this->score = other;
+    }
+
+    void operator=(const Pos other) {
+        this->x = other.x;
+        this->y = other.y;
+
+    }
+
+
+    bool operator==(const PosScore other) {
+        return (this->score == other.score);
+    }
+
+    bool operator==(const double other) {
+        return this->score == other;
+    }
+
+    bool operator==(const Pos other) {
+        return (this->x == other.x) && (this->y == other.y);
+    }
+
+    bool operator<(const PosScore other) {
+        return this->score < other.score;
+    }
+
+    bool operator<(const double other) {
+        return this->score < other;
+    }
+
+    bool operator<=(const PosScore other) {
+        return this->score <= other.score;
+    }
+
+    bool operator<=(const double other) {
+        return this->score <= other;
+    }
+
+    bool operator>(const PosScore other) {
+        return this->score > other.score;
+    }
+
+    bool operator>(const double other) {
+        return this->score > other;
+    }
+
+
+    bool operator>=(const PosScore other) {
+        return this->score >= other.score;
+    }
+
+    bool operator>=(const double other) {
+        return this->score >= other;
+    }
+
+    ostream& operator<<(ostream &out) {
+        out << this->toStr();
+        return out;
+    }
+
+};
+
+vector<Pos> get_positions(vector<PosScore> lst) {
+    vector<Pos> positions;
+    for (const PosScore &ps : lst) {
+        positions.emplace_back(Pos(ps.x, ps.y));
+    }
+    return positions;
+}
+
+vector<double> get_scores(vector<PosScore> lst) {
+    vector<double> scores;
+    for (const PosScore &ps : lst) {
+        scores.push_back(ps.score);
+    }
+    return scores;
+}
+
 struct AlignmentResult {
     string query_aligned;
     string target_aligned;
@@ -76,6 +175,116 @@ struct AlignmentResult {
     string match_string;
     double score;
 };
+
+struct PosScores {
+    vector<Pos> positions;
+    vector<double> scores;
+};
+
+// struct PosScore {
+//     Pos pos;
+//     double score;
+// };
+//
+
+
+
+template <typename T>
+size_t find_in_vec(vector<T> vec, T item) {
+    return find(vec.begin(), vec.end(), item);
+}
+
+template <typename T>
+bool contains(vector<T> vec, T item) {
+    return find(vec.begin(), vec.end(), item) != vec.end();
+}
+
+bool is_lowercase(char c) {
+    return (c >= 'a') && (c <= 'z');
+}
+
+bool is_lowercase(string &str) {
+    for (char c : str) {
+        if (!is_lowercase(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_uppercase(char c) {
+    return (c >= 'A') && (c <= 'Z');
+}
+
+bool is_uppercase(string &str) {
+    for (char c : str) {
+        if (!is_uppercase(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_alpha(char c) {
+    return is_lowercase(c) || is_uppercase(c);
+}
+
+bool is_numer(char c) {
+    return (c >= '0') && (c <= '9');
+}
+
+//Set str to be all lowercase, in place.
+void lowercase(string &str) {
+    char case_offset = 'a' - 'A';
+    for (int i=0; i<str.size(); ++i) {
+        if (is_uppercase(str[i])) {
+            str[i] += case_offset;
+        }
+    }
+}
+
+string to_lowercase(string &str) {
+    string lower_str(str);
+    lowercase(lower_str);
+    return lower_str;
+}
+
+void uppercase(string &str) {
+    char case_offset = 'a' - 'A';
+    for (int i=0; i<str.size(); ++i) {
+        if (is_lowercase(str[i])) {
+            str[i] -= case_offset;
+        }
+    }
+}
+
+
+string to_uppercase(string &str) {
+    string upper_str(str);
+    lowercase(upper_str);
+    return upper_str;
+}
+
+vector<string> splitstr(string s, char delim='\n') {
+    int i = 0;
+    int prev_i = 0;
+    int l = s.size();
+    vector<string> results;
+    vector<size_t> indices;
+    while (i < l) {
+        i = s.find(delim, prev_i);
+        if (i == string::npos || i <= prev_i) {
+            break;
+        }
+        results.emplace_back(s.substr(prev_i, i-prev_i+1));
+        indices.emplace_back(i);
+        prev_i = i+1;
+    }
+    return results;
+}
+
+
+
 
 float max4(float x1, float x2, float x3, float x4) {
     float maxVal = x1;
@@ -201,25 +410,112 @@ template <typename T> T vecmax(vector<T> vec) {
             maxVal = val;
         }
     }
-    // cout << "vecmax: " << maxVal << endl; 
+    // cout << "vecmax: " << maxVal << endl;
+    return maxVal;
+}
+template <typename T> T vecmin(vector<T> vec) {
+    if (vec.size() == 0) {
+        T val = 0;
+        // cout << "vecmax: " << val << endl;
+        return val;
+    }
+    T maxVal = vec[0];
+    for (T val : vec) {
+        if (val < maxVal) {
+            maxVal = val;
+        }
+    }
+    // cout << "vecmax: " << maxVal << endl;
     return maxVal;
 }
 
-vector<AlignmentResult> smith_waterman(string query, string target, char sep='\n', size_t num_scores=5) {
+double min_posscore(vector<PosScore> pos_scores) {
+    double max_val = pos_scores[0].score;
+    for (int i=0; i<pos_scores.size(); ++i) {
+        if (pos_scores[i].score > max_val) {
+            max_val = pos_scores[i].score;
+        }
+    }
+    return max_val;
+
+}
+
+bool _is_top_score(double val, double top_score, double num_scores_counted, size_t num_scores) {
+    return (val >= 3.0) && ((val > top_score) || (num_scores_counted < num_scores));
+}
+
+
+//Inserts val into top_scores at the correct position if possible, ensuring top_scores remains sorted
+void handle_top_score_insertion(PosScore posscore, vector<PosScore> &top_scores, size_t max_num_scores) {
+    double val = posscore.score;
+    if (top_scores.size() < max_num_scores) {
+        int i=0;
+        for (; i<top_scores.size(); ++i) {
+            if (top_scores[i] < val) {
+                break;
+            }
+        }
+        size_t idx = min(static_cast<size_t>(i+1), top_scores.size());
+        top_scores.emplace(top_scores.begin() + idx, posscore);
+        return;
+
+    }
+    double min_topscore = min_posscore(top_scores);
+    size_t num_scores = top_scores.size();
+    if (val < min_topscore) {
+        if (num_scores >= max_num_scores) {
+            for (int i=0; i<num_scores; ++i) {
+                if (val > top_scores[i].score) {
+                    top_scores[i] = posscore;
+                    return;
+                }
+            }
+        }
+        else {
+            top_scores.push_back(posscore);
+            sort(top_scores.begin(), top_scores.end(), greater<>());
+        }
+    }
+    else {
+        //val > min_topscore, it is added no matter what
+        if (num_scores >= max_num_scores) {
+
+            for (int i=0; i<num_scores; i++) {
+                if (top_scores[i] <= val) {
+                    top_scores[i] = val;
+                    return; 
+                }
+            }
+            //made it through list without changing any values, return false
+            return;
+        }
+        else {
+            top_scores.push_back(posscore);
+            sort(top_scores.begin(), top_scores.end(), greater<>());
+            return;
+        }
+    }
+
+    return;
+}
+
+
+
+
+//Calculates best alignment between query and target, returning a single AlignmentResult.
+AlignmentResult smith_waterman(string query, string target, char sep='\n', size_t num_scores=5) {
     // cout << "in smith_waterman, target = " << target << "\n\n\n";
+    string target_original_case(target);
+    lowercase(query);
+    lowercase(target);
     size_t l1 = query.size();
     size_t l2 = target.size();
     Matrix matrix = create_matrix(l1+1, l2+1);
-    vector<double> top_scores;
-    vector<Pos> top_scores_positions;
-
-    size_t num_scores_counted = 0;
-
-
-    Pos zero_pos(0, 0);
+    double best_cell_score = 0.0;
+    Pos best_end_pos(0, 0);
 
     float penalty = 2.0;
-    //calculate matrix
+    //calculate matrix, keeping track of the best score and its position
     for (int j=1; j<l1+1; j++) {
         for (int i=1; i<l2+1; i++) {
             float score = (query[j-1] == target[i-1]) ? 3 : -3;
@@ -229,198 +525,210 @@ vector<AlignmentResult> smith_waterman(string query, string target, char sep='\n
             float opt4 = 0.0;
             matrix[j][i] = max4(opt1, opt2, opt3, opt4);
             float cell_value = matrix[j][i];
-            // if (cell_value > 3.0) {
-            //     cout << "cell_value: " << cell_value << endl;
-            // }
-            // for (int idx = 0; idx < ; idx++) {
-            if (cell_value > vecmax<double>(top_scores)) {
-                top_scores.push_back(cell_value);
-                top_scores_positions.push_back(Pos(i, j));
-                num_scores_counted++;
-            }
-                // if (num_scores_counted >= num_scores) {
-                //     break;
-                //
-                // }
-            // }
-        }
-    }
-    num_scores = top_scores.size();
-
-    int num_nonzero_scores = 0;
-    if (top_scores.size() > 0) {
-        // cout << "top scores and positions:" << endl;
-        for (int i=0; i<num_scores; i++) {
-            // cout << "pos: " << top_scores_positions[i].toStr() << ", score: " << top_scores[i] << "str: " << target.substr(top_scores_positions[i].x, 10) << endl;
-            if (top_scores[i] > 0.1) {
-                num_nonzero_scores++;
+            if (cell_value > best_cell_score) {
+                best_cell_score = cell_value;
+                best_end_pos = Pos(i, j);
             }
         }
     }
-    else {
-        vector<AlignmentResult> noresults;
-        return noresults;
 
+    if (best_cell_score <= 0.0) {
+        return AlignmentResult{"", "", 0, "", 0.0};
     }
 
-    // cout << "Found a total of: " << num_nonzero_scores << " nonzero scores" << endl;
+    //find position of max value (this is the end position, and then trace it back)
+    Pos end_pos = best_end_pos;
+    Pos curr_pos(end_pos.x, end_pos.y);
+    size_t curr_y = end_pos.y;
+    size_t curr_x = end_pos.x;
+    double score = 0.0;
+    string aligned1 = "";
+    string aligned2 = "";
 
+    while((matrix[curr_y][curr_x] > 0)) {
+        float curr_score = matrix[curr_y][curr_x];
+        curr_pos = Pos(curr_x, curr_y);
+        score += curr_score;
+        float diagonal = matrix[curr_y-1][curr_x-1];
+        float up = matrix[curr_y-1][curr_x];
+        float left = matrix[curr_y][curr_x-1];
+        float sub_val = query[curr_y-1] == target[curr_x-1] ? 3.0 : -3.0;
 
-
-    //find position of max value (this is the end position, and then we trace it back to the start)
-    //trace end_pos back to the start (1, 1) by following max values while moving only up and/or left (cannot move right or down)
-    
-    vector<AlignmentResult> results;
-
-    for (int i=0; i<num_scores; i++) {
-        Pos end_pos = top_scores_positions[i];
-        Pos curr_pos(end_pos.x, end_pos.y);
-        vector<Pos> positions = {curr_pos};
-        vector<Pos> offsets = {Pos(0, 0)};
-        size_t safety_counter = 0;
-        size_t curr_y = end_pos.y;
-        size_t curr_x = end_pos.x;
-
-        double score = 0.0;
-
-
-        string aligned1 = "";
-        string aligned2 = "";
-
-
-        while((matrix[curr_y][curr_x] > 0)) {
-            // cout << "in while loop" << endl;
-            // curr_pos = next_traceback_pos(matrix, curr_x, curr_y);
-            //
-            float curr_score = matrix[curr_y][curr_x];
-            curr_pos = Pos(curr_x, curr_y);
-            score += curr_score;
-            float diagonal = matrix[curr_y-1][curr_x-1];
-            float up = matrix[curr_y-1][curr_x];
-            float left = matrix[curr_y][curr_x-1];
-            float sub_val = query[curr_y-1] == target[curr_x-1] ? 3.0 : -3.0;
-
-            if (curr_score == diagonal + sub_val) {
-                aligned1 += query[curr_y - 1];
-                aligned2 += target[curr_x - 1];
-                curr_y--; curr_x--;
-            }
-            else if (curr_score == up - penalty) {
-                aligned1 += query[curr_y - 1];
-                aligned2 += "_";
-                curr_y--;
-            }
-            else if (curr_score == left - penalty) {
-                aligned1 += "_";
-                aligned2 += target[curr_x - 1];
-                curr_x--;
-            }
-            else {
-                break;
-                aligned1 += "_";
-                aligned2 += "_";
-                curr_y--; curr_x--;
-
-            }
+        if (curr_score == diagonal + sub_val) {
+            aligned1 += query[curr_y - 1];
+            aligned2 += target[curr_x - 1];
+            curr_y--; curr_x--;
         }
-
-        
-
-        size_t target_start_pos = static_cast<size_t>(curr_pos.x);
-        size_t match_start_pos = target.rfind(sep, target_start_pos);
-        size_t match_end_pos = target.find(sep, end_pos.x);
-
-        // 1. If rfind doesn't find a newline, the path starts at index 0. 
-        // Otherwise, it starts at match_start_pos + 1 (to skip the newline itself).
-        size_t actual_start = (match_start_pos == string::npos) ? 0 : match_start_pos + 1;
-
-        // 2. Calculate the length. 
-        // If find doesn't find a trailing newline, take everything to the end of the string.
-        size_t length;
-        if (match_end_pos == string::npos) {
-            length = string::npos; 
-        } else {
-            length = match_end_pos - actual_start;
+        else if (curr_score == up - penalty) {
+            aligned1 += query[curr_y - 1];
+            aligned2 += "_";
+            curr_y--;
         }
-
-        if (length < query.size()/3) {
+        else if (curr_score == left - penalty) {
+            aligned1 += "_";
+            aligned2 += target[curr_x - 1];
+            curr_x--;
+        }
+        else {
             break;
         }
-
-        string match_str = target.substr(actual_start, length);
-
-
-
-        reverse(aligned1.begin(), aligned1.end());
-        reverse(aligned2.begin(), aligned2.end());
-        AlignmentResult res{aligned1, aligned2, target_start_pos, match_str, score};
-        results.push_back(res);
-        // cout << "match_str: " << match_str << endl;
-
     }
-    // cout << "match_str: " << match_str << ",\tscore: " << score << endl;
-    return results;
+
+    size_t target_start_pos = static_cast<size_t>(curr_pos.x);
+    size_t match_start_pos = target.rfind(sep, target_start_pos);
+    size_t match_end_pos = target.find(sep, end_pos.x);
+
+    // 1. If rfind doesn't find a newline, the path starts at index 0.
+    // Otherwise, it starts at match_start_pos + 1 (to skip the newline itself).
+    size_t actual_start = (match_start_pos == string::npos) ? 0 : match_start_pos + 1;
+
+    // 2. Calculate the length.
+    // If find doesn't find a trailing newline, take everything to the end of the string.
+    size_t length;
+    if (match_end_pos == string::npos) {
+        length = string::npos;
+    } else {
+        length = match_end_pos - actual_start;
+    }
+
+    if (length < query.size()/3) {
+        return AlignmentResult{"", "", target_start_pos, "", score};
+    }
+
+    string match_str = target_original_case.substr(actual_start, length);
+    reverse(aligned1.begin(), aligned1.end());
+    reverse(aligned2.begin(), aligned2.end());
+    return AlignmentResult{aligned1, aligned2, target_start_pos, match_str, score};
+}
+
+string unquote_string(string s) {
+    size_t l = s.size();
+    if (l==0) return s;
+    size_t ll = l - 1;
+    if (s[0] != s[ll]) return s;
+    if ((s[0]=='"' || s[0]==39) && (s[ll]=='"' || s[ll]==39)) { return s.substr(1, ll-1);}
+    return s;
 }
 
 
 
+string dir_to_str(fs::path root_path, bool recurse=false) {
+    if (!fs::is_directory(root_path)) {
+        root_path = root_path.parent_path();
+    }
+    string s;
+    if (recurse) {
+        for (const auto &direntry : fs::recursive_directory_iterator(root_path)) {
+            s += unquote_string(direntry.path().string()) + '\n';
+        }
+    }
+    else {
+        for (const auto &direntry : fs::directory_iterator(root_path)) {
+            s += unquote_string(direntry.path().string()) + '\n';
+        }
+    }
+    return s;
+
+}
+
+//Calculates num_scores best alignments between query and target, returning a vector of AlignmentResults.
 
 
+//Run smith_waterman on every individual path in 'target', which must be a newline separated string of paths
+//Returns vector<AlignmentResult> of all results at or above 'score_threshold'
+vector<AlignmentResult> smith_waterman_helper_string(string &query, string &target, double score_threshold) {
+    string q = to_lowercase(query);
+    string t = to_lowercase(target);
+    vector<string> lines = splitstr(t);
+    vector<AlignmentResult> results;
+    for (string line : lines) {
+        AlignmentResult res = smith_waterman(query, line);
+        if (res.score >= score_threshold) {
+            results.push_back(res);
+        }
+    }
+    return results;
+}
+
+//Run smith_waterman on every individual path rooted at 'root_path'
+//Returns vector<AlignmentResult> of all results at or above 'score_threshold'
+vector<AlignmentResult> smith_waterman_helper_path(string query, fs::path root_path, double score_threshold) {
+    // chrono::duration d;
+    vector<AlignmentResult> results;
+    if (!fs::is_directory(root_path)) {
+        root_path = root_path.parent_path();
+    }
+    for (const auto & direntry : fs::recursive_directory_iterator(root_path)) {
+        AlignmentResult res = smith_waterman(query, direntry.path().string());
+        if (res.score >= score_threshold) {
+            res.match_string = unquote_string(res.match_string);
+            results.push_back(res);
+        }
+    }
+    return results;
+}
 
 size_t find_prev_newline_index(string s, size_t start) {
     return s.substr(0, start).find_last_of('\n');
 }
 
-vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_threshold=35.0, bool files_only=true) {
-    vector<fs::path> path_results;
-    // vector<thread> threads_list;
-    vector<future<vector<AlignmentResult>>> futures_list;
-    vector<string> buffer_list;
-    vector<Pos> pos_ranges;
+vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_threshold=35.0, size_t max_buffer_size=50*KB, bool no_retry = false) {
+    vector<future<vector<AlignmentResult>>> futures;
     string buffer;
-    size_t max_buffer_size = 20 * KB;
     buffer.reserve(max_buffer_size);
-    double best_score = 0.0;
-    size_t curr_pos = 0;
-    size_t curr_start_pos = 0;
-    size_t curr_size = 0;
-    size_t max_num_threads = 120;
-    size_t results_per_run = 50;
+    fs::recursive_directory_iterator it(root_path);
+    vector<fs::path> results;
     char sep = '\n';
-    for (const auto &direntry : fs::recursive_directory_iterator(root_path)) {
-        fs::path path = direntry.path();
-        string new_path_entry = path.string() + sep;
-        buffer += new_path_entry;
-        if (!files_only || fs::is_regular_file(path)) {
-            if (buffer.size() >= max_buffer_size) {
-                if (futures_list.size() < max_num_threads) {
-                    futures_list.emplace_back(std::async(smith_waterman, query, std::move(buffer), sep, results_per_run));
-                    buffer.clear();
-                    buffer.reserve(max_buffer_size);
-                }
-                else {break;}
-            }
-        }
+    bool complete = false;
 
-    }
+    auto start_time = Time::now();
 
-    // for (thread &t : threads_list) {
-    int i=0;
-    for (future<vector<AlignmentResult>> &fut : futures_list) {
-        cout << "Getting results from thread: " << i << endl;
-        vector<AlignmentResult> results = fut.get();
-        // Pos range = pos_ranges[i];
-        for (AlignmentResult res : results) {
+    for (decltype(it) end; it != end; it++) {
+        fs::path path = it->path();
+        string path_str = unquote_string(path.string());
+        buffer += path_str + sep;
+        if (buffer.size() >= max_buffer_size) {
+            AlignmentResult res = smith_waterman(query, buffer);
             if (res.score >= score_threshold) {
-                string result_path = res.match_string;
-                path_results.push_back(result_path);
-                best_score = res.score;
+                cout << "Found candidate: " << res.match_string << endl;
+                fs::path matched_path = res.match_string;
+                futures.emplace_back(async(smith_waterman_helper_path, query, matched_path, score_threshold));
+            }
+
+            buffer.clear();
+            buffer.reserve(max_buffer_size);
+        }
+    }
+
+    for (future<vector<AlignmentResult>> &fut : futures) {
+        vector<AlignmentResult> reslst = fut.get();
+        for (AlignmentResult res : reslst) {
+            if (res.score >= score_threshold) {
+                results.push_back(res.match_string);
             }
         }
-        i++;
     }
-    cout << "Best score: " << best_score << endl;
-    return path_results;
+    auto end_time = Time::now();
+    fsec fs = end_time - start_time;
+    ms dur = chrono::duration_cast<ms>(fs);
+    float seconds = fs.count();
+    if (!no_retry) {
+        if (seconds < 0.1) {
+            for (int i=0; i<6; i++) {
+                max_buffer_size /= 2;
+                //use no_retry=true to avoid entering this if branch in the recursive call, avoiding an infinite loop
+                vector<fs::path> new_results = fuzzy_search(query, root_path, score_threshold, max_buffer_size, true);
+                for (const fs::path &path : new_results) {
+                    if (find(results.begin(), results.end(), path) != results.end()) {
+                        results.push_back(path);
+                    }
+                }
+            }
+
+        }
+    }
+
+    return results;
 }
 
 
@@ -436,7 +744,9 @@ int main(int argc, char** argv) {
             break;
         }
     }
-
+    size_t max_num_threads=120;
+    size_t results_per_run=50;
+    size_t max_memory_budget = 20 * MB;
     string query(argv[1]);
     fs::path root_path = argc >= 3 ? fs::path(string(argv[2])) : fs::current_path();
     double threshold = 35.0;
@@ -445,13 +755,39 @@ int main(int argc, char** argv) {
         ss << argv[3];
         ss >> threshold;
     }
-    vector<fs::path> results = fuzzy_search(query, root_path, threshold);
+    if (argc > 4) {
+        stringstream ss;
+        ss << argv[4];
+        ss >> max_memory_budget;
+    }
+
+    if (argc > 5) {
+        stringstream ss;
+        ss << argv[5];
+        ss >> results_per_run;
+    }
+
+    cout << "memory budget: " << max_memory_budget/KB << "KB\n";
+
+
+    vector<fs::path> results = fuzzy_search(query, root_path, threshold, max_memory_budget);
+    // for (int i=0; i<4; i++) {
+    //     if (results.size() == 0) {
+    //         max_memory_budget /= 2;
+    //         cout << "No results found, halving max buffer size and trying again";
+    //         results = fuzzy_search(query, root_path, threshold, max_memory_budget);
+    //     }
+    //     else{
+    //         break;
+    //     }
+    // }
     for (fs::path &path : results) {
         cout << path << endl;
     }
 
     cout << "Total of " << results.size() << " found\n";
     cout << "Results for query: " << query << endl;
+    cout << "Used results_per_run: " << results_per_run << ", max_num_threads: " << max_num_threads << ", threshold: " << threshold << endl;
 
     // size_t names_size = directory_filenames_size(root_path);
     // cout << "Directory " << root_path.filename() << " has total (recursive) names size: " << names_size << endl;
