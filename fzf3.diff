@@ -1,0 +1,36 @@
+diff --git "a/C:/Users/sjber/Coding/Python/fuzzyfind\\.remote-xcode-server\\tmp\\serverdiff\\client-35ef32eb-fzf_test3.cpp" "b/C:/Users/sjber/Coding/Python/fuzzyfind\\.remote-xcode-server\\tmp\\serverdiff\\server-35ef32eb-fzf_test3.cpp"
+index 5193960..dc0ab30 100644
+--- "a/C:/Users/sjber/Coding/Python/fuzzyfind\\.remote-xcode-server\\tmp\\serverdiff\\client-35ef32eb-fzf_test3.cpp"
++++ "b/C:/Users/sjber/Coding/Python/fuzzyfind\\.remote-xcode-server\\tmp\\serverdiff\\server-35ef32eb-fzf_test3.cpp"
+@@ -672,6 +672,23 @@ size_t find_prev_newline_index(string s, size_t start) {
+     return s.substr(0, start).find_last_of('\n');
+ }
+ 
++double get_elapsed_time(chrono::time_point<chrono::steady_clock, chrono::duration<long long, ratio<1LL, 1000000000LL>>> start_time)  {
++    auto end_time = Time::now();
++    fsec fs = end_time - start_time;
++    ms dur = chrono::duration_cast<ms>(fs);
++    double seconds = static_cast<double>(fs.count());
++    return seconds;
++}
++
++template <typename T>
++vector<T> range(T start, T end, T stride) {
++    vector<T> res;
++    for (T i=start; i<end; i+=stride) {
++        res.emplace_back(i);
++    }
++    return res;
++}
++
+ vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_threshold=35.0, size_t max_buffer_size=50*KB, bool no_retry = false) {
+     vector<future<vector<AlignmentResult>>> futures;
+     string buffer;
+@@ -682,6 +699,7 @@ vector<fs::path> fuzzy_search(string query, fs::path root_path, double score_thr
+     bool complete = false;
+ 
+     auto start_time = Time::now();
++    vector<double> time_increments;
+ 
+     for (decltype(it) end; it != end; it++) {
+         fs::path path = it->path();

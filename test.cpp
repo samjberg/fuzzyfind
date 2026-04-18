@@ -57,6 +57,17 @@ public:
 
 };
 
+struct AlignmentResult {
+    string query_aligned;
+    string target_aligned;
+    size_t target_start_pos;
+    string match_string;
+    double score;
+    const bool operator==(const AlignmentResult &other) {
+        return match_string == other.match_string;
+    }
+};
+
 
 class PosScore {
 public:
@@ -366,7 +377,17 @@ string unquote_string(string s) {
     size_t l = s.size();
     if (l==0) return s;
     size_t ll = l - 1;
-    if (s[0] != s[ll]) return s;
+    if (s[0] != s[ll]) {
+        if (s.find_first_of("[{(") != 0) {
+            return s;
+        }
+        else {
+            if ((s[0] == '[' && s[ll]==']') || (s[0] == '{' && s[ll] == '}') || (s[0] == '(' && s[ll] == ')')) {
+                return s.substr(1, ll-1);
+            }
+            return s;
+        }
+    }
     if ((s[0]=='"' || s[0]==39) && (s[ll]=='"' || s[ll]==39)) { return s.substr(1, ll-1);}
     return s;
 }
@@ -389,14 +410,55 @@ string dir_to_str(fs::path root_path, bool recurse=false) {
 }
 
 
+fs::path get_good_parent(fs::path path) {
+    if (path == fs::path("/")) return path;
+    path = path.parent_path();
+    if (path == fs::path("/")) return path;
+    string s;
+    fs::path fs_root("/");
+    while ((path != fs_root) && (path.string().find_first_of("._") == 0)) {
+        path = path.parent_path();
+    }
+    return path;
+}
 
+template <typename T>
+vector<T> slice(vector<T> lst, size_t start, size_t end=0) {
+    vector<T> res(lst.begin() + start, lst.begin() + end);
+    return res;
+}
 
-//Calculates num_scores best alignments between query and target, returning a vector of AlignmentResults.
 
 int main(int argc, char** argv) {
 
+    vector<double> lst3 = {5.0, 4.3, 4.0, 3.5, 3.2, 1.6};
+    vector<double> lst3_mid = slice<double>(lst3, 1, 4);
+    for (double d : lst3_mid) {
+        cout << d << endl;
+    }
+    return 0;
+    double val = 3.6;
+    int i = 0;
+    for (; i<lst3.size(); ++i) {
+        cout << "i: " << i << endl;
+        if (lst3[i] < val) {
+            break;
+        }
+    }
+    cout << endl;
+    size_t idx = min(static_cast<size_t>(i), lst3.size());
+    cout << "idx: " << idx << endl;
+    lst3.emplace(lst3.begin() + idx, val);
+    for (double d : lst3) {
+        cout << d << endl;
+    }
+    return 0;
+
 
     string s = argv[1];
+    cout << s << endl;
+    cout << unquote_string(s) << endl;
+    return 0;
     cout << dir_to_str(s) << endl;
     return 0;
     PosScore p1 = PosScore(2, 3, 3);
